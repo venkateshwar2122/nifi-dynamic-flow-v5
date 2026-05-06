@@ -1,85 +1,102 @@
 package com.example.nifi.controller;
 
+import com.example.nifi.datastreamcrud.entity.DataStreamEntity;
+import com.example.nifi.datastreamcrud.repository.DatastreamCrudRepository;
 import com.example.nifi.dto.FlowRequest;
+import com.example.nifi.service.AsyncFlowDeploymentService;
 import com.example.nifi.service.FlowBuilderService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.http.HttpStatus;
+import com.example.nifi.service.NifiResourceTrackingService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.time.OffsetDateTime;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/flow")
 public class FlowController {
 
-    private static final Logger log = LoggerFactory.getLogger(FlowController.class);
-
     private final FlowBuilderService service;
+    private final DatastreamCrudRepository repository;
+    private final AsyncFlowDeploymentService asyncFlowDeploymentService;
+    private final NifiResourceTrackingService trackingService;
 
-    public FlowController(FlowBuilderService service) {
+    public FlowController(
+            FlowBuilderService service,
+            DatastreamCrudRepository repository,
+            AsyncFlowDeploymentService asyncFlowDeploymentService,
+            NifiResourceTrackingService trackingService
+    ) {
         this.service = service;
+        this.repository = repository;
+        this.asyncFlowDeploymentService = asyncFlowDeploymentService;
+        this.trackingService = trackingService;
     }
 
     @PostMapping("/create")
     public ResponseEntity<?> createFlow(@RequestBody FlowRequest request) {
 
-        String flowName = request.getDatastreamName();
-
-        log.info("==============================================");
-        log.info("🚀 [START] Create Flow API");
-        log.info("📌 Flow Name: {}", flowName);
-
-        try {
-
-            // =========================
-            // STEP 1: Validate Request
-            // =========================
-            log.info("Step 1: Validating request");
-
-            if (request == null) {
-                log.error("❌ Request body is null");
-                return ResponseEntity.badRequest().body("Request body cannot be null");
-            }
-
-            if (request.getStreamNodes() == null || request.getStreamEdges() == null) {
-                log.error("❌ Invalid payload: Missing nodes or edges");
-                return ResponseEntity.badRequest().body("Invalid JSON payload");
-            }
-
-            log.info("✅ Request validation successful");
-
-            // =========================
-            // STEP 2: Build Flow
-            // =========================
-            log.info("Step 2: Calling FlowBuilderService");
-
-            String result = service.buildFlow(request);
-
-            log.info("✅ Flow created successfully: {}", flowName);
-            log.info("==============================================");
-
-            return ResponseEntity.ok(result);
-
-        } catch (IllegalArgumentException e) {
-            log.error("❌ Validation Error in Flow: {}", flowName, e);
-
-            return ResponseEntity
-                    .status(HttpStatus.BAD_REQUEST)
-                    .body("Validation Error: " + e.getMessage());
-
-        } catch (RuntimeException e) {
-            log.error("❌ Runtime Error while creating flow: {}", flowName, e);
-
-            return ResponseEntity
-                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Runtime Error: " + e.getMessage());
-
-        } catch (Exception e) {
-            log.error("❌ Unexpected Error while creating flow: {}", flowName, e);
-
-            return ResponseEntity
-                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Unexpected Error: " + e.getMessage());
+        if (request == null) {
+            return ResponseEntity.badRequest().body("Request body cannot be null");
         }
+
+        if (request.getStreamNodes() == null || request.getStreamEdges() == null) {
+            return ResponseEntity.badRequest().body("Invalid JSON payload");
+        }
+
+        String processGroupId = service.buildFlow(request);
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("message", "Flow created successfully");
+        response.put("processGroupId", processGroupId);
+
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/deploy/{datastreamId}")
+    public ResponseEntity<?> deployDatastream(@PathVariable UUID datastreamId) {
+
+        DataStreamEntity entity = repository.findById(datastreamId)
+                .orElseThrow(() -> new RuntimeException("Datastream not found: " + datastreamId));
+
+        entity.setDeploymentStatus("PENDING");
+        entity.setDeploymentError(null);
+        entity.setUpdatedAt(OffsetDateTime.now());
+        repository.save(entity);
+
+        asyncFlowDeploymentService.deployAsync(datastreamId);
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("message", "Deployment started");
+        response.put("datastreamId", datastreamId);
+        response.put("deploymentStatus", "PENDING");
+
+        return ResponseEntity.accepted().body(response);
+    }
+
+    @GetMapping("/status/{datastreamId}")
+    public ResponseEntity<?> getDeploymentStatus(@PathVariable UUID datastreamId) {
+
+        DataStreamEntity entity = repository.findById(datastreamId)
+                .orElseThrow(() -> new RuntimeException("Datastream not found: " + datastreamId));
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("datastreamId", entity.getId());
+        response.put("datastreamName", entity.getDatastreamName());
+        response.put("datastreamStatus", entity.getDatastreamStatus());
+        response.put("deploymentStatus", entity.getDeploymentStatus());
+        response.put("deploymentError", entity.getDeploymentError());
+        response.put("processGroupId", entity.getProcessGroupId());
+        response.put("lastDeployedAt", entity.getLastDeployedAt());
+        response.put("updatedAt", entity.getUpdatedAt());
+
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/resources/{datastreamId}")
+    public ResponseEntity<?> getNifiResources(@PathVariable UUID datastreamId) {
+        return ResponseEntity.ok(trackingService.getResources(datastreamId));
     }
 }

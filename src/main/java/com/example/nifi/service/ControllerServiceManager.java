@@ -1,6 +1,7 @@
 package com.example.nifi.service;
 
 import com.example.nifi.client.NiFiClient;
+import com.example.nifi.client.NiFiControllerServiceVerifier;
 import com.example.nifi.config.FlowProperties;
 import com.example.nifi.dto.FlowContext;
 import org.slf4j.Logger;
@@ -16,10 +17,16 @@ public class ControllerServiceManager {
 
     private final NiFiClient client;
     private final FlowProperties flow;
+    private final NiFiControllerServiceVerifier verifier;
 
-    public ControllerServiceManager(NiFiClient client, FlowProperties flow) {
+    public ControllerServiceManager(
+            NiFiClient client,
+            FlowProperties flow,
+            NiFiControllerServiceVerifier verifier
+    ) {
         this.client = client;
         this.flow = flow;
+        this.verifier = verifier;
     }
 
     private String setup(String token, String pgId, String type, Map<String, Object> props) {
@@ -32,6 +39,11 @@ public class ControllerServiceManager {
             int version = client.getVersion(token, id, "controller-services");
             client.updateCS(token, id, version, props);
 
+            if (shouldVerify(type)) {
+                log.info("🔎 Verifying Controller Service before enable: {}", id);
+                verifier.verify(id);
+            }
+
             int newVersion = client.getVersion(token, id, "controller-services");
             client.enable(token, id, newVersion);
 
@@ -39,16 +51,20 @@ public class ControllerServiceManager {
             return id;
 
         } catch (Exception e) {
-            log.error("❌ Controller Service creation failed", e);
-            throw new RuntimeException(e);
+            log.error("❌ Controller Service setup failed for type: {}", type, e);
+            throw new RuntimeException("Controller Service setup failed: " + type + " | " + e.getMessage(), e);
         }
     }
 
-    // ================= DBCP =================
+    private boolean shouldVerify(String type) {
+        return type.contains("DBCPConnectionPool")
+                || type.contains("MongoDBControllerService");
+    }
+
     public String createDbcp(String token, String pgId, FlowContext ctx) {
 
-        String url = "jdbc:mysql://" + ctx.getSourceHost() + ":" +
-                ctx.getSourcePort() + "/" + ctx.getSourceDatabase();
+        String url = "jdbc:mysql://" + ctx.getSourceHost() + ":"
+                + ctx.getSourcePort() + "/" + ctx.getSourceDatabase();
 
         return setup(token, pgId,
                 "org.apache.nifi.dbcp.DBCPConnectionPool",
@@ -61,10 +77,10 @@ public class ControllerServiceManager {
                 ));
     }
 
-    // ================= JSON =================
     public String createJsonWriter(String token, String pgId) {
         return setup(token, pgId,
-                "org.apache.nifi.json.JsonRecordSetWriter", Map.of());
+                "org.apache.nifi.json.JsonRecordSetWriter",
+                Map.of());
     }
 
     public String createJsonReader(String token, String pgId) {
@@ -73,7 +89,6 @@ public class ControllerServiceManager {
                 Map.of("Schema Access Strategy", "infer-schema"));
     }
 
-    // ================= MONGO =================
     public String createMongo(String token, String pgId, FlowContext ctx) {
 
         String uri = "mongodb://" + ctx.getDestinationHost() + ":" + ctx.getDestinationPort();

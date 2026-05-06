@@ -15,9 +15,11 @@ public class ProcessorManager {
     private static final Logger log = LoggerFactory.getLogger(ProcessorManager.class);
 
     private final NiFiClient client;
+    private final FlowLayoutService layoutService;
 
-    public ProcessorManager(NiFiClient client) {
+    public ProcessorManager(NiFiClient client, FlowLayoutService layoutService) {
         this.client = client;
+        this.layoutService = layoutService;
     }
 
     public String getMainRelationship(String type) {
@@ -77,7 +79,7 @@ public class ProcessorManager {
 
         log.info("⚙️ Creating Query Processor");
 
-        String id = client.createProcessor(token, pgId, type);
+        String id = client.createProcessor(token, pgId, type, layoutService.horizontal(0));
         int version = client.getVersion(token, id, "processors");
 
         Map<String, Object> props = Map.of(
@@ -104,7 +106,7 @@ public class ProcessorManager {
 
         log.info("⚙️ Creating Mongo Processor");
 
-        String id = client.createProcessor(token, pgId, type);
+        String id = client.createProcessor(token, pgId, type, layoutService.horizontal(1));
         int version = client.getVersion(token, id, "processors");
 
         Map<String, Object> props = Map.of(

@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.UUID;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import com.example.nifi.dto.ProcessorPosition;
 
 @Component
 public class NiFiClient {
@@ -84,11 +85,17 @@ public class NiFiClient {
     }
 
     // ================= PROCESSOR =================
-    public String createProcessor(String token, String pgId, String type) {
+    public String createProcessor(String token, String pgId, String type, ProcessorPosition position) {
 
         Map<String, Object> body = Map.of(
-                "revision", Map.of("version", 0),   // ✅ REQUIRED
-                "component", Map.of("type", type)
+                "revision", Map.of("version", 0),
+                "component", Map.of(
+                        "type", type,
+                        "position", Map.of(
+                                "x", position.getX(),
+                                "y", position.getY()
+                        )
+                )
         );
 
         Map<String, Object> res = post(
@@ -242,37 +249,47 @@ public class NiFiClient {
     }
 
     // ================= CONNECT =================
-    public void connect(String token, String pgId,
-                        String sourceId, String destId, String rel) {
+    public String connect(String token, String pgId,
+                          String sourceId, String destId, String rel) {
 
         Map<String, Object> body = Map.of(
                 "revision", Map.of("version", 0),
                 "component", Map.of(
-                        "parentGroupId", pgId,   // ✅ CRITICAL
+                        "parentGroupId", pgId,
 
                         "source", Map.of(
                                 "id", sourceId,
                                 "type", "PROCESSOR",
-                                "groupId", pgId     // ✅ CRITICAL
+                                "groupId", pgId
                         ),
 
                         "destination", Map.of(
                                 "id", destId,
                                 "type", "PROCESSOR",
-                                "groupId", pgId     // ✅ CRITICAL
+                                "groupId", pgId
                         ),
 
-                        "selectedRelationships", List.of(rel)
+                        "selectedRelationships", List.of(rel),
+
+                        // optional but recommended
+                        "backPressureObjectThreshold", 10000,
+                        "backPressureDataSizeThreshold", "1 GB",
+                        "flowFileExpiration", "0 sec",
+                        "prioritizers", List.of(),
+                        "bends", List.of(),
+                        "name", ""
                 )
         );
 
         log.info("🔗 Creating connection: {} -> {} via {}", sourceId, destId, rel);
 
-        post(
+        Map<String, Object> res = post(
                 nifi.getBaseUrl() + "/process-groups/" + pgId + "/connections",
                 token,
                 body
         );
+
+        return (String) res.get("id");
     }
 
 

@@ -21,19 +21,22 @@ public class FlowBuilderService {
     private final ProcessorManager pm;
     private final FlowParser parser;
     private final NiFiProperties nifi;
+    private final NifiResourceTrackingService trackingService;
 
     public FlowBuilderService(
             NiFiClient client,
             ControllerServiceManager cs,
             ProcessorManager pm,
             FlowParser parser,
-            NiFiProperties nifi) {
-
+            NiFiProperties nifi,
+            NifiResourceTrackingService trackingService
+    ) {
         this.client = client;
         this.cs = cs;
         this.pm = pm;
         this.parser = parser;
         this.nifi = nifi;
+        this.trackingService = trackingService;
     }
 
     public String buildFlow(FlowRequest request) {
@@ -44,9 +47,10 @@ public class FlowBuilderService {
 
         try {
 
-            // STEP 1: PARSE
+            // STEP 1: PARSE and get ctx
             log.info("[{}] Step 1: Parsing JSON", traceId);
             FlowContext ctx = parser.parse(request);
+            UUID datastreamId = request.getDatastreamId();
 
             // STEP 2: TOKEN
             log.info("[{}] Step 2: Getting NiFi token", traceId);
@@ -56,21 +60,83 @@ public class FlowBuilderService {
             log.info("[{}] Step 3: Creating Process Group", traceId);
             String pgId = client.createPG(token, nifi.getRootGroupId(), ctx.getFlowName());
 
+            trackingService.saveResource(
+                    datastreamId,
+                    pgId,
+                    "PROCESS_GROUP",
+                    ctx.getFlowName(),
+                    pgId,
+                    "PROCESS_GROUP"
+            );
+
             // STEP 4: SERVICES
             log.info("[{}] Step 4: Creating Controller Services", traceId);
             String dbcpId = cs.createDbcp(token, pgId, ctx);
+
+            trackingService.saveResource(
+                    datastreamId,
+                    pgId,
+                    "CONTROLLER_SERVICE",
+                    "SOURCE_DBCP",
+                    dbcpId,
+                    "org.apache.nifi.dbcp.DBCPConnectionPool"
+            );
             String writerId = cs.createJsonWriter(token, pgId);
+
+            trackingService.saveResource(
+                    datastreamId,
+                    pgId,
+                    "CONTROLLER_SERVICE",
+                    "JSON_WRITER",
+                    writerId,
+                    "org.apache.nifi.json.JsonRecordSetWriter"
+            );
             String readerId = cs.createJsonReader(token, pgId);
+
+            trackingService.saveResource(
+                    datastreamId,
+                    pgId,
+                    "CONTROLLER_SERVICE",
+                    "JSON_READER",
+                    readerId,
+                    "org.apache.nifi.json.JsonTreeReader"
+            );
             String mongoId = cs.createMongo(token, pgId, ctx);
+
+            trackingService.saveResource(
+                    datastreamId,
+                    pgId,
+                    "CONTROLLER_SERVICE",
+                    "MONGO_CLIENT",
+                    mongoId,
+                    "org.apache.nifi.mongodb.MongoDBControllerService"
+            );
 
             // STEP 5: PROCESSORS
             log.info("[{}] Step 5: Creating Processors", traceId);
             ProcessorManager.ProcessorInfo source =
                     pm.createSourceProcessor(token, pgId, dbcpId, writerId, ctx);
 
+            trackingService.saveResource(
+                    datastreamId,
+                    pgId,
+                    "PROCESSOR",
+                    "SOURCE_PROCESSOR",
+                    source.getId(),
+                    source.getType()
+            );
+
             ProcessorManager.ProcessorInfo dest =
                     pm.createDestinationProcessor(token, pgId, mongoId, readerId, ctx);
 
+            trackingService.saveResource(
+                    datastreamId,
+                    pgId,
+                    "PROCESSOR",
+                    "DESTINATION_PROCESSOR",
+                    dest.getId(),
+                    dest.getType()
+            );
             // STEP 6: RELATIONSHIP
             // ================= STEP 6 FIXED =================
 
@@ -108,7 +174,17 @@ public class FlowBuilderService {
 
             // STEP 7: CONNECT
             log.info("[{}] Step 7: Connecting processors", traceId);
-            client.connect(token, pgId, source.getId(), dest.getId(), mainRel);
+            String connectionId = client.connect(token, pgId, source.getId(), dest.getId(), mainRel);
+
+            trackingService.saveResource(
+                    datastreamId,
+                    pgId,
+                    "CONNECTION",
+                    mainRel,
+                    connectionId,
+                    "CONNECTION"
+            );
+
 
             // STEP 8: START
             log.info("[{}] Step 8: Starting flow", traceId);
@@ -117,7 +193,7 @@ public class FlowBuilderService {
             log.info("✅ [{}] FLOW CREATED SUCCESSFULLY", traceId);
             log.info("==============================================");
 
-            return "FLOW CREATED | PG_ID=" + pgId;
+            return pgId;
 
         } catch (Exception e) {
             log.error("❌ [{}] FLOW CREATION FAILED", traceId, e);

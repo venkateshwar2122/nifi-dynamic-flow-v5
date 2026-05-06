@@ -2,12 +2,22 @@ package com.example.nifi.dto;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 public class FlowRequest {
 
+    private UUID datastreamId;
     private String datastreamName;
     private List<Map<String, Object>> streamNodes;
     private List<Map<String, Object>> streamEdges;
+
+    public UUID getDatastreamId() {
+        return datastreamId;
+    }
+
+    public void setDatastreamId(UUID datastreamId) {
+        this.datastreamId = datastreamId;
+    }
 
     public String getDatastreamName() {
         return datastreamName;

@@ -9,10 +9,10 @@
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>com.example</groupId>
-    <artifactId>nifi-dynamic-flow-v4</artifactId>
+    <artifactId>nifi-dynamic-flow-v5</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>nifi-dynamic-flow-v4</name>
-    <description>nifi-dynamic-flow-v4</description>
+    <description>nifi-dynamic-flow-v5</description>
     <url/>
     <licenses>
         <license/>
@@ -54,6 +54,18 @@
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <!-- Spring Data JPA -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <!-- PostgreSQL Driver -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
         </dependency>
     </dependencies>
 
