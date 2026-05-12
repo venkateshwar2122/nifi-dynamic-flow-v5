@@ -11,7 +11,7 @@
     <groupId>com.example</groupId>
     <artifactId>nifi-dynamic-flow-v5</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>nifi-dynamic-flow-v4</name>
+    <name>nifi-dynamic-flow</name>
     <description>nifi-dynamic-flow-v5</description>
     <url/>
     <licenses>
