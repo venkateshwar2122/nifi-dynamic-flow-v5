@@ -59,13 +59,14 @@ public class AsyncFlowDeploymentService {
                     request.getStreamEdges() == null ? 0 : request.getStreamEdges().size()
             );
 
-            String processGroupId = flowBuilderService.buildFlow(request);
+            String processGroupId = flowBuilderService.buildFlow(request, runId);
             log.info("Flow build completed. datastreamId={} processGroupId={}", datastreamId, processGroupId);
             deploymentRunService.markSuccess(runId, processGroupId);
+            flowBuilderService.markDeploymentResourcesCurrent(datastreamId, runId);
 
             entity.setProcessGroupId(processGroupId);
-            entity.setDeploymentStatus("RUNNING");
-            entity.setDatastreamStatus("ACTIVE");
+            entity.setDeploymentStatus("SUCCESS");
+            entity.setDatastreamStatus("DEPLOYED");
             entity.setDeploymentError(null);
             entity.setLastDeployedAt(OffsetDateTime.now());
             entity.setUpdatedAt(OffsetDateTime.now());

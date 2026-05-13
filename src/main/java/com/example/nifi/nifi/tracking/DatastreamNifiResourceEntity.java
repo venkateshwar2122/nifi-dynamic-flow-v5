@@ -17,6 +17,9 @@ public class DatastreamNifiResourceEntity {
     @Column(name = "datastream_id", nullable = false)
     private UUID datastreamId;
 
+    @Column(name = "deployment_run_id")
+    private UUID deploymentRunId;
+
     @Column(name = "process_group_id")
     private String processGroupId;
 
@@ -59,6 +62,9 @@ public class DatastreamNifiResourceEntity {
     @Column(name = "enabled")
     private Boolean enabled;
 
+    @Column(name = "is_current")
+    private Boolean current;
+
     @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
 
@@ -98,6 +104,14 @@ public class DatastreamNifiResourceEntity {
 
     public void setDatastreamId(UUID datastreamId) {
         this.datastreamId = datastreamId;
+    }
+
+    public UUID getDeploymentRunId() {
+        return deploymentRunId;
+    }
+
+    public void setDeploymentRunId(UUID deploymentRunId) {
+        this.deploymentRunId = deploymentRunId;
     }
 
     public String getProcessGroupId() {
@@ -210,6 +224,14 @@ public class DatastreamNifiResourceEntity {
 
     public void setEnabled(Boolean enabled) {
         this.enabled = enabled;
+    }
+
+    public Boolean getCurrent() {
+        return current;
+    }
+
+    public void setCurrent(Boolean current) {
+        this.current = current;
     }
 
     public String getErrorMessage() {

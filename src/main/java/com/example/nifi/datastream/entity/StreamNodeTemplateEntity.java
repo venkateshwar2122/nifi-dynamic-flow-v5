@@ -14,26 +14,33 @@ public class StreamNodeTemplateEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id")
     private Long id;
 
+    @Column(name = "type")
     private String type;
 
+    @Column(name = "label")
     private String label;
 
+    @Column(name = "icon")
     private String icon;
 
+    @Column(name = "accessible")
     private Boolean accessible;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb")
+    @Column(name = "tabs", columnDefinition = "jsonb")
     private List<Map<String, Object>> tabs;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb")
+    @Column(name = "data_fields", columnDefinition = "jsonb")
     private List<Map<String, Object>> dataFields;
 
+    @Column(name = "created_at")
     private OffsetDateTime createdAt;
 
+    @Column(name = "updated_at")
     private OffsetDateTime updatedAt;
 
     @PrePersist

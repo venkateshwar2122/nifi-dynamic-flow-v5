@@ -18,45 +18,45 @@ public class DataStreamEntity {
     @Column(name = "id")
     private UUID id;
 
-    @Column(name = "\"processGroupId\"")
+    @Column(name = "process_group_id")
     private String processGroupId;
 
-    @Column(name = "\"datastreamName\"", nullable = false)
+    @Column(name = "datastream_name", nullable = false)
     private String datastreamName;
 
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
-    @Column(name = "\"datastreamType\"")
+    @Column(name = "datastream_type")
     private String datastreamType;
 
-    @Column(name = "\"datastreamStatus\"")
+    @Column(name = "datastream_status")
     private String datastreamStatus;
 
-    @Column(name = "\"deploymentStatus\"")
+    @Column(name = "deployment_status")
     private String deploymentStatus;
 
-    @Column(name = "\"deploymentError\"", columnDefinition = "TEXT")
+    @Column(name = "deployment_error", columnDefinition = "TEXT")
     private String deploymentError;
 
-    @Column(name = "\"lastDeployedAt\"")
+    @Column(name = "last_deployed_at")
     private OffsetDateTime lastDeployedAt;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "\"streamNodes\"", columnDefinition = "jsonb", nullable = false)
+    @Column(name = "stream_nodes", columnDefinition = "jsonb", nullable = false)
     private List<Map<String, Object>> streamNodes;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "\"streamEdges\"", columnDefinition = "jsonb", nullable = false)
+    @Column(name = "stream_edges", columnDefinition = "jsonb", nullable = false)
     private List<Map<String, Object>> streamEdges;
 
-    @Column(name = "\"createdAt\"")
+    @Column(name = "created_at")
     private OffsetDateTime createdAt;
 
-    @Column(name = "\"updateAt\"")
+    @Column(name = "updated_at")
     private OffsetDateTime updatedAt;
 
-    @Column(name = "\"updatedBy\"")
+    @Column(name = "updated_by")
     private String updatedBy;
 
     @PrePersist

@@ -43,6 +43,10 @@ public class FlowBuilderService {
     }
 
     public String buildFlow(FlowRequest request) {
+        return buildFlow(request, null);
+    }
+
+    public String buildFlow(FlowRequest request, UUID deploymentRunId) {
 
         String traceId = UUID.randomUUID().toString();
         log.info("==============================================");
@@ -61,6 +65,7 @@ public class FlowBuilderService {
 
             trackingService.saveResource(
                     datastreamId,
+                    deploymentRunId,
                     parentProcessGroupId,
                     null,
                     "PARENT_PROCESS_GROUP",
@@ -75,12 +80,13 @@ public class FlowBuilderService {
                     "STOPPED",
                     null,
                     false,
+                    false,
                     null
             );
 
             log.info("[{}] Step 4: Creating shared controller services", traceId);
             TablePipelineDeploymentService.SharedControllerServices services =
-                    createSharedControllerServices(token, datastreamId, parentProcessGroupId, ctx);
+                    createSharedControllerServices(token, datastreamId, deploymentRunId, parentProcessGroupId, ctx);
 
             log.info("[{}] Step 5: Creating {} child table pipeline(s)", traceId, ctx.getTables().size());
             for (FlowTable table : ctx.getTables()) {
@@ -89,6 +95,7 @@ public class FlowBuilderService {
                 tablePipelineDeploymentService.deployTablePipeline(
                         token,
                         datastreamId,
+                        deploymentRunId,
                         parentProcessGroupId,
                         tableContext,
                         services
@@ -117,15 +124,21 @@ public class FlowBuilderService {
         }
     }
 
+    public void markDeploymentResourcesCurrent(UUID datastreamId, UUID deploymentRunId) {
+        trackingService.markRunCurrent(datastreamId, deploymentRunId);
+    }
+
     private TablePipelineDeploymentService.SharedControllerServices createSharedControllerServices(
             String token,
             UUID datastreamId,
+            UUID deploymentRunId,
             String parentProcessGroupId,
             FlowContext ctx
     ) {
         String dbcpId = controllerServiceManager.createDbcp(token, parentProcessGroupId, ctx);
         trackingService.saveResource(
                 datastreamId,
+                deploymentRunId,
                 parentProcessGroupId,
                 null,
                 "CONTROLLER_SERVICE",
@@ -140,12 +153,14 @@ public class FlowBuilderService {
                 "ENABLED",
                 "VALID",
                 true,
+                false,
                 null
         );
 
         String writerId = controllerServiceManager.createJsonWriter(token, parentProcessGroupId);
         trackingService.saveResource(
                 datastreamId,
+                deploymentRunId,
                 parentProcessGroupId,
                 null,
                 "CONTROLLER_SERVICE",
@@ -160,12 +175,14 @@ public class FlowBuilderService {
                 "ENABLED",
                 "VALID",
                 true,
+                false,
                 null
         );
 
         String readerId = controllerServiceManager.createJsonReader(token, parentProcessGroupId);
         trackingService.saveResource(
                 datastreamId,
+                deploymentRunId,
                 parentProcessGroupId,
                 null,
                 "CONTROLLER_SERVICE",
@@ -180,12 +197,14 @@ public class FlowBuilderService {
                 "ENABLED",
                 "VALID",
                 true,
+                false,
                 null
         );
 
         String mongoId = controllerServiceManager.createMongo(token, parentProcessGroupId, ctx);
         trackingService.saveResource(
                 datastreamId,
+                deploymentRunId,
                 parentProcessGroupId,
                 null,
                 "CONTROLLER_SERVICE",
@@ -200,6 +219,7 @@ public class FlowBuilderService {
                 "ENABLED",
                 "VALID",
                 true,
+                false,
                 null
         );
 

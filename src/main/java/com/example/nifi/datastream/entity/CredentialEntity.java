@@ -12,30 +12,41 @@ public class CredentialEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(name = "id")
     private UUID id;
 
+    @Column(name = "credential_name")
     private String credentialName;
 
+    @Column(name = "db_type")
     private String dbType;
 
+    @Column(name = "host")
     private String host;
 
+    @Column(name = "port")
     private Integer port;
 
+    @Column(name = "database_name")
     private String databaseName;
 
+    @Column(name = "username")
     private String username;
 
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "password", columnDefinition = "TEXT")
     private String password;
 
+    @Column(name = "created_by")
     private String createdBy;
 
+    @Column(name = "updated_by")
     private String updatedBy;
 
+    @Column(name = "created_at")
     private OffsetDateTime createdAt;
 
+    @Column(name = "updated_at")
     private OffsetDateTime updatedAt;
 
     @PrePersist

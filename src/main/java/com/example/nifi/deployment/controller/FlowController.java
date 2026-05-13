@@ -4,6 +4,7 @@ import com.example.nifi.datastream.entity.DataStreamEntity;
 import com.example.nifi.datastream.repository.DatastreamRepository;
 import com.example.nifi.deployment.tracking.DeploymentRunEntity;
 import com.example.nifi.deployment.tracking.DeploymentRunService;
+import com.example.nifi.deployment.tracking.DeploymentTableRunService;
 import com.example.nifi.flow.dto.FlowRequest;
 import com.example.nifi.deployment.service.AsyncFlowDeploymentService;
 import com.example.nifi.deployment.service.FlowBuilderService;
@@ -29,19 +30,22 @@ public class FlowController {
     private final AsyncFlowDeploymentService asyncFlowDeploymentService;
     private final NifiResourceTrackingService trackingService;
     private final DeploymentRunService deploymentRunService;
+    private final DeploymentTableRunService deploymentTableRunService;
 
     public FlowController(
             FlowBuilderService service,
             DatastreamRepository repository,
             AsyncFlowDeploymentService asyncFlowDeploymentService,
             NifiResourceTrackingService trackingService,
-            DeploymentRunService deploymentRunService
+            DeploymentRunService deploymentRunService,
+            DeploymentTableRunService deploymentTableRunService
     ) {
         this.service = service;
         this.repository = repository;
         this.asyncFlowDeploymentService = asyncFlowDeploymentService;
         this.trackingService = trackingService;
         this.deploymentRunService = deploymentRunService;
+        this.deploymentTableRunService = deploymentTableRunService;
     }
 
     @PostMapping("/create")
@@ -124,5 +128,11 @@ public class FlowController {
     public ResponseEntity<?> getDeploymentRuns(@PathVariable UUID datastreamId) {
         log.info("Fetching deployment runs. datastreamId={}", datastreamId);
         return ResponseEntity.ok(deploymentRunService.getRuns(datastreamId));
+    }
+
+    @GetMapping("/runs/{deploymentRunId}/tables")
+    public ResponseEntity<?> getDeploymentRunTables(@PathVariable UUID deploymentRunId) {
+        log.info("Fetching deployment table runs. deploymentRunId={}", deploymentRunId);
+        return ResponseEntity.ok(deploymentTableRunService.getTableRuns(deploymentRunId));
     }
 }

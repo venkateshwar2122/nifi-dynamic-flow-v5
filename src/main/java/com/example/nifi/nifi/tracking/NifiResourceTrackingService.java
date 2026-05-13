@@ -3,6 +3,7 @@ package com.example.nifi.nifi.tracking;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -29,6 +30,7 @@ public class NifiResourceTrackingService {
     ) {
         return saveResource(
                 datastreamId,
+                null,
                 processGroupId,
                 null,
                 resourceType,
@@ -43,12 +45,14 @@ public class NifiResourceTrackingService {
                 null,
                 null,
                 null,
+                false,
                 null
         );
     }
 
     public DatastreamNifiResourceEntity saveResource(
             UUID datastreamId,
+            UUID deploymentRunId,
             String processGroupId,
             String tableName,
             String resourceType,
@@ -63,6 +67,7 @@ public class NifiResourceTrackingService {
             String runStatus,
             String validationStatus,
             Boolean enabled,
+            Boolean current,
             String errorMessage
     ) {
         if (datastreamId == null || resourceId == null || resourceId.isBlank()) {
@@ -76,6 +81,7 @@ public class NifiResourceTrackingService {
         DatastreamNifiResourceEntity entity = new DatastreamNifiResourceEntity();
 
         entity.setDatastreamId(datastreamId);
+        entity.setDeploymentRunId(deploymentRunId);
         entity.setProcessGroupId(processGroupId);
         entity.setTableName(tableName);
         entity.setResourceType(resourceType);
@@ -90,6 +96,7 @@ public class NifiResourceTrackingService {
         entity.setRunStatus(runStatus);
         entity.setValidationStatus(validationStatus);
         entity.setEnabled(enabled);
+        entity.setCurrent(Boolean.TRUE.equals(current));
         entity.setErrorMessage(errorMessage);
         entity.setLastCheckedAt(OffsetDateTime.now());
 
@@ -147,6 +154,23 @@ public class NifiResourceTrackingService {
 
     public void markFailed(UUID datastreamId, String resourceId, String errorMessage) {
         markStatus(datastreamId, resourceId, "FAILED", null, null, false, errorMessage);
+    }
+
+    @Transactional
+    public void markRunCurrent(UUID datastreamId, UUID deploymentRunId) {
+        if (datastreamId == null || deploymentRunId == null) {
+            return;
+        }
+
+        int cleared = repository.clearCurrentResources(datastreamId);
+        int marked = repository.markRunResourcesCurrent(datastreamId, deploymentRunId);
+        log.info(
+                "Marked deployment run resources as current. datastreamId={} deploymentRunId={} cleared={} marked={}",
+                datastreamId,
+                deploymentRunId,
+                cleared,
+                marked
+        );
     }
 
     public List<DatastreamNifiResourceEntity> getResources(UUID datastreamId) {
