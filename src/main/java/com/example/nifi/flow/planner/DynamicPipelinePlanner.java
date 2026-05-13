@@ -48,7 +48,7 @@ public class DynamicPipelinePlanner {
                         "Mongo Database Name", ctx.getDestinationDatabase(),
                         "Mongo Collection Name", ctx.getCollectionName(),
                         destinationTemplate.getServiceProperties().get("reader"), services.readerId(),
-                        "Update Key Fields", "id"
+                        "update-key-fields", "id"
                 )
         );
 

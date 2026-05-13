@@ -16,7 +16,7 @@ public class ProcessorTemplateRegistry {
                     "5 sec",
                     Map.of(
                             "dbcp", "Database Connection Pooling Service",
-                            "writer", "Record Writer"
+                            "writer", "qdbtr-record-writer"
                     )
             ),
             "destination:mongodb", new ProcessorTemplate(
@@ -26,8 +26,8 @@ public class ProcessorTemplateRegistry {
                     "success",
                     "0 sec",
                     Map.of(
-                            "mongo", "Client Service",
-                            "reader", "Record Reader"
+                            "mongo", "mongo-client-service",
+                            "reader", "record-reader"
                     )
             )
     );

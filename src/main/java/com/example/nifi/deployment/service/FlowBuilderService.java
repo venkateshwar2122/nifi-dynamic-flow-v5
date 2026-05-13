@@ -62,10 +62,20 @@ public class FlowBuilderService {
             trackingService.saveResource(
                     datastreamId,
                     parentProcessGroupId,
+                    null,
                     "PARENT_PROCESS_GROUP",
                     ctx.getFlowName(),
                     parentProcessGroupId,
-                    "PROCESS_GROUP"
+                    "PROCESS_GROUP",
+                    nifi.getRootGroupId(),
+                    null,
+                    null,
+                    null,
+                    "CREATED",
+                    "STOPPED",
+                    null,
+                    false,
+                    null
             );
 
             log.info("[{}] Step 4: Creating shared controller services", traceId);
@@ -74,6 +84,7 @@ public class FlowBuilderService {
 
             log.info("[{}] Step 5: Creating {} child table pipeline(s)", traceId, ctx.getTables().size());
             for (FlowTable table : ctx.getTables()) {
+                log.info("[{}] Deploying table pipeline. table={}", traceId, table.getTableName());
                 FlowContext tableContext = ctx.forTable(table);
                 tablePipelineDeploymentService.deployTablePipeline(
                         token,
@@ -82,7 +93,18 @@ public class FlowBuilderService {
                         tableContext,
                         services
                 );
+                log.info("[{}] Table pipeline deployed. table={}", traceId, table.getTableName());
             }
+
+            trackingService.markStatus(
+                    datastreamId,
+                    parentProcessGroupId,
+                    "DEPLOYED",
+                    "RUNNING",
+                    null,
+                    true,
+                    null
+            );
 
             log.info("[{}] FLOW CREATED SUCCESSFULLY", traceId);
             log.info("==============================================");
@@ -91,7 +113,7 @@ public class FlowBuilderService {
 
         } catch (Exception e) {
             log.error("[{}] FLOW CREATION FAILED", traceId, e);
-            throw new RuntimeException(e);
+            throw new RuntimeException("Flow creation failed: " + e.getMessage(), e);
         }
     }
 
@@ -105,40 +127,80 @@ public class FlowBuilderService {
         trackingService.saveResource(
                 datastreamId,
                 parentProcessGroupId,
+                null,
                 "CONTROLLER_SERVICE",
                 "SOURCE_DBCP",
                 dbcpId,
-                "org.apache.nifi.dbcp.DBCPConnectionPool"
+                "org.apache.nifi.dbcp.DBCPConnectionPool",
+                parentProcessGroupId,
+                null,
+                null,
+                null,
+                "ENABLED",
+                "ENABLED",
+                "VALID",
+                true,
+                null
         );
 
         String writerId = controllerServiceManager.createJsonWriter(token, parentProcessGroupId);
         trackingService.saveResource(
                 datastreamId,
                 parentProcessGroupId,
+                null,
                 "CONTROLLER_SERVICE",
                 "JSON_WRITER",
                 writerId,
-                "org.apache.nifi.json.JsonRecordSetWriter"
+                "org.apache.nifi.json.JsonRecordSetWriter",
+                parentProcessGroupId,
+                null,
+                null,
+                null,
+                "ENABLED",
+                "ENABLED",
+                "VALID",
+                true,
+                null
         );
 
         String readerId = controllerServiceManager.createJsonReader(token, parentProcessGroupId);
         trackingService.saveResource(
                 datastreamId,
                 parentProcessGroupId,
+                null,
                 "CONTROLLER_SERVICE",
                 "JSON_READER",
                 readerId,
-                "org.apache.nifi.json.JsonTreeReader"
+                "org.apache.nifi.json.JsonTreeReader",
+                parentProcessGroupId,
+                null,
+                null,
+                null,
+                "ENABLED",
+                "ENABLED",
+                "VALID",
+                true,
+                null
         );
 
         String mongoId = controllerServiceManager.createMongo(token, parentProcessGroupId, ctx);
         trackingService.saveResource(
                 datastreamId,
                 parentProcessGroupId,
+                null,
                 "CONTROLLER_SERVICE",
                 "MONGO_CLIENT",
                 mongoId,
-                "org.apache.nifi.mongodb.MongoDBControllerService"
+                "org.apache.nifi.mongodb.MongoDBControllerService",
+                parentProcessGroupId,
+                null,
+                null,
+                null,
+                "ENABLED",
+                "ENABLED",
+                "VALID",
+                true,
+                null
         );
 
         return new TablePipelineDeploymentService.SharedControllerServices(

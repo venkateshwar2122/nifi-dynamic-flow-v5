@@ -8,6 +8,7 @@ import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
@@ -43,6 +44,7 @@ public class NiFiControllerServiceVerifier {
     private NiFiSession loginAndCreateSession() {
 
         String url = nifi.getBaseUrl().replace("/nifi-api", "") + "/nifi-api/access/token";
+        log.info("Creating NiFi verification session. loginUrl={}", url);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
@@ -51,11 +53,16 @@ public class NiFiControllerServiceVerifier {
         body.add("username", nifi.getUsername());
         body.add("password", nifi.getPassword());
 
-        ResponseEntity<String> response = restTemplate.postForEntity(
-                url,
-                new HttpEntity<>(body, headers),
-                String.class
-        );
+        ResponseEntity<String> response;
+        try {
+            response = restTemplate.postForEntity(
+                    url,
+                    new HttpEntity<>(body, headers),
+                    String.class
+            );
+        } catch (RestClientResponseException e) {
+            throw verificationHttpException("POST", url, e);
+        }
 
         String jwtToken = response.getBody();
 
@@ -83,6 +90,10 @@ public class NiFiControllerServiceVerifier {
                 + "/controller-services/"
                 + controllerServiceId
                 + "/config/verification-requests";
+        log.info("Creating controller service verification request. controllerServiceId={} url={}",
+                controllerServiceId,
+                url
+        );
 
         HttpHeaders headers = buildHeaders(session);
 
@@ -94,13 +105,17 @@ public class NiFiControllerServiceVerifier {
                 )
         );
 
-        ResponseEntity<Map<String, Object>> response =
-                restTemplate.exchange(
-                        url,
-                        HttpMethod.POST,
-                        new HttpEntity<>(body, headers),
-                        new ParameterizedTypeReference<Map<String, Object>>() {}
-                );
+        ResponseEntity<Map<String, Object>> response;
+        try {
+            response = restTemplate.exchange(
+                    url,
+                    HttpMethod.POST,
+                    new HttpEntity<>(body, headers),
+                    new ParameterizedTypeReference<Map<String, Object>>() {}
+            );
+        } catch (RestClientResponseException e) {
+            throw verificationHttpException("POST", url, e);
+        }
 
         Map<String, Object> responseBody = response.getBody();
 
@@ -130,6 +145,11 @@ public class NiFiControllerServiceVerifier {
                 + controllerServiceId
                 + "/config/verification-requests/"
                 + requestId;
+        log.info("Polling controller service verification. controllerServiceId={} requestId={} url={}",
+                controllerServiceId,
+                requestId,
+                url
+        );
 
         HttpHeaders headers = buildHeaders(session);
 
@@ -137,13 +157,17 @@ public class NiFiControllerServiceVerifier {
 
         for (int i = 0; i < 20; i++) {
 
-            ResponseEntity<Map<String, Object>> response =
-                    restTemplate.exchange(
-                            url,
-                            HttpMethod.GET,
-                            new HttpEntity<>(headers),
-                            new ParameterizedTypeReference<Map<String, Object>>() {}
-                    );
+            ResponseEntity<Map<String, Object>> response;
+            try {
+                response = restTemplate.exchange(
+                        url,
+                        HttpMethod.GET,
+                        new HttpEntity<>(headers),
+                        new ParameterizedTypeReference<Map<String, Object>>() {}
+                );
+            } catch (RestClientResponseException e) {
+                throw verificationHttpException("GET", url, e);
+            }
 
             Map<String, Object> responseBody = response.getBody();
 
@@ -267,5 +291,29 @@ public class NiFiControllerServiceVerifier {
     }
 
     private record NiFiSession(String jwtToken, String requestToken) {
+    }
+
+    private RuntimeException verificationHttpException(String method, String url, RestClientResponseException e) {
+        log.error(
+                "NiFi verification HTTP {} failed. url={} status={} body={}",
+                method,
+                url,
+                e.getStatusCode(),
+                safeBody(e.getResponseBodyAsString()),
+                e
+        );
+        return new RuntimeException(
+                "NiFi verification HTTP " + method + " failed for " + url
+                        + " | status=" + e.getStatusCode()
+                        + " | body=" + safeBody(e.getResponseBodyAsString()),
+                e
+        );
+    }
+
+    private String safeBody(String body) {
+        if (body == null || body.isBlank()) {
+            return "";
+        }
+        return body.length() > 1000 ? body.substring(0, 1000) + "...[truncated]" : body;
     }
 }

@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.util.HashMap;
 import java.util.Map;
 
 @Service
@@ -37,6 +38,11 @@ public class ControllerServiceManager {
             String id = client.createCS(token, pgId, type);
 
             int version = client.getVersion(token, id, "controller-services");
+            log.info("Applying Controller Service properties. id={} type={} properties={}",
+                    id,
+                    type,
+                    sanitizeProperties(props)
+            );
             client.updateCS(token, id, version, props);
 
             if (shouldVerify(type)) {
@@ -65,13 +71,18 @@ public class ControllerServiceManager {
 
         String url = "jdbc:mysql://" + ctx.getSourceHost() + ":"
                 + ctx.getSourcePort() + "/" + ctx.getSourceDatabase();
+        log.info("Preparing DBCP controller service. jdbcUrl={} driverClass={} driverLocation={}",
+                url,
+                flow.getDbcp().getDriverClass(),
+                flow.getDbcp().getDriverLocation()
+        );
 
         return setup(token, pgId,
                 "org.apache.nifi.dbcp.DBCPConnectionPool",
                 Map.of(
                         "Database Connection URL", url,
                         "Database Driver Class Name", flow.getDbcp().getDriverClass(),
-                        "Database Driver Locations", flow.getDbcp().getDriverLocation(),
+                        "Database Driver Location(s)", flow.getDbcp().getDriverLocation(),
                         "Database User", ctx.getSourceUser(),
                         "Password", ctx.getSourcePassword()
                 ));
@@ -86,19 +97,51 @@ public class ControllerServiceManager {
     public String createJsonReader(String token, String pgId) {
         return setup(token, pgId,
                 "org.apache.nifi.json.JsonTreeReader",
-                Map.of("Schema Access Strategy", "infer-schema"));
+                Map.of("schema-access-strategy", "infer-schema"));
     }
 
     public String createMongo(String token, String pgId, FlowContext ctx) {
 
         String uri = "mongodb://" + ctx.getDestinationHost() + ":" + ctx.getDestinationPort();
+        log.info("Preparing Mongo controller service. uri={} database={}",
+                uri,
+                ctx.getDestinationDatabase()
+        );
+
+        Map<String, Object> props = new HashMap<>();
+        props.put("mongo-uri", uri);
+
+        if (hasText(ctx.getDestinationUser())) {
+            props.put("Database User", ctx.getDestinationUser());
+        }
+
+        if (hasText(ctx.getDestinationPassword())) {
+            props.put("Password", ctx.getDestinationPassword());
+        }
 
         return setup(token, pgId,
                 "org.apache.nifi.mongodb.MongoDBControllerService",
-                Map.of(
-                        "Mongo URI", uri,
-                        "Database User", ctx.getDestinationUser(),
-                        "Password", ctx.getDestinationPassword()
+                props);
+    }
+
+    private Map<String, Object> sanitizeProperties(Map<String, Object> props) {
+        if (props == null || props.isEmpty()) {
+            return Map.of();
+        }
+
+        return props.entrySet().stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        Map.Entry::getKey,
+                        entry -> isSensitive(entry.getKey()) ? "******" : entry.getValue()
                 ));
+    }
+
+    private boolean isSensitive(String key) {
+        String normalized = key == null ? "" : key.toLowerCase();
+        return normalized.contains("password") || normalized.contains("token") || normalized.contains("secret");
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }

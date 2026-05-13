@@ -32,14 +32,60 @@ public class DatastreamNifiResourceEntity {
     @Column(name = "nifi_type", length = 500)
     private String nifiType;
 
+    @Column(name = "table_name")
+    private String tableName;
+
+    @Column(name = "parent_resource_id")
+    private String parentResourceId;
+
+    @Column(name = "source_resource_id")
+    private String sourceResourceId;
+
+    @Column(name = "destination_resource_id")
+    private String destinationResourceId;
+
+    @Column(name = "relationship_name")
+    private String relationshipName;
+
+    @Column(name = "resource_status")
+    private String resourceStatus;
+
+    @Column(name = "run_status")
+    private String runStatus;
+
+    @Column(name = "validation_status")
+    private String validationStatus;
+
+    @Column(name = "enabled")
+    private Boolean enabled;
+
+    @Column(name = "error_message", columnDefinition = "TEXT")
+    private String errorMessage;
+
+    @Column(name = "last_checked_at")
+    private OffsetDateTime lastCheckedAt;
+
     @Column(name = "created_at")
     private OffsetDateTime createdAt;
 
+    @Column(name = "updated_at")
+    private OffsetDateTime updatedAt;
+
     @PrePersist
     public void onCreate() {
+        OffsetDateTime now = OffsetDateTime.now();
         if (createdAt == null) {
-            createdAt = OffsetDateTime.now();
+            createdAt = now;
         }
+
+        if (updatedAt == null) {
+            updatedAt = now;
+        }
+    }
+
+    @PreUpdate
+    public void onUpdate() {
+        updatedAt = OffsetDateTime.now();
     }
 
     public UUID getId() {
@@ -94,7 +140,99 @@ public class DatastreamNifiResourceEntity {
         this.nifiType = nifiType;
     }
 
+    public String getTableName() {
+        return tableName;
+    }
+
+    public void setTableName(String tableName) {
+        this.tableName = tableName;
+    }
+
+    public String getParentResourceId() {
+        return parentResourceId;
+    }
+
+    public void setParentResourceId(String parentResourceId) {
+        this.parentResourceId = parentResourceId;
+    }
+
+    public String getSourceResourceId() {
+        return sourceResourceId;
+    }
+
+    public void setSourceResourceId(String sourceResourceId) {
+        this.sourceResourceId = sourceResourceId;
+    }
+
+    public String getDestinationResourceId() {
+        return destinationResourceId;
+    }
+
+    public void setDestinationResourceId(String destinationResourceId) {
+        this.destinationResourceId = destinationResourceId;
+    }
+
+    public String getRelationshipName() {
+        return relationshipName;
+    }
+
+    public void setRelationshipName(String relationshipName) {
+        this.relationshipName = relationshipName;
+    }
+
+    public String getResourceStatus() {
+        return resourceStatus;
+    }
+
+    public void setResourceStatus(String resourceStatus) {
+        this.resourceStatus = resourceStatus;
+    }
+
+    public String getRunStatus() {
+        return runStatus;
+    }
+
+    public void setRunStatus(String runStatus) {
+        this.runStatus = runStatus;
+    }
+
+    public String getValidationStatus() {
+        return validationStatus;
+    }
+
+    public void setValidationStatus(String validationStatus) {
+        this.validationStatus = validationStatus;
+    }
+
+    public Boolean getEnabled() {
+        return enabled;
+    }
+
+    public void setEnabled(Boolean enabled) {
+        this.enabled = enabled;
+    }
+
+    public String getErrorMessage() {
+        return errorMessage;
+    }
+
+    public void setErrorMessage(String errorMessage) {
+        this.errorMessage = errorMessage;
+    }
+
+    public OffsetDateTime getLastCheckedAt() {
+        return lastCheckedAt;
+    }
+
+    public void setLastCheckedAt(OffsetDateTime lastCheckedAt) {
+        this.lastCheckedAt = lastCheckedAt;
+    }
+
     public OffsetDateTime getCreatedAt() {
         return createdAt;
+    }
+
+    public OffsetDateTime getUpdatedAt() {
+        return updatedAt;
     }
 }

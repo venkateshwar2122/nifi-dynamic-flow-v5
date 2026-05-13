@@ -3,9 +3,9 @@ server:
 
 spring:
   datasource:
-    url: jdbc:postgresql://35.231.51.249:5432/DataStream
+    url: jdbc:postgresql://localhost:5432/nifi_dynamic_flow
     username: postgres
-    password: SecurePostgresPass123!
+    password: FIS@123.
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -21,9 +21,9 @@ spring:
 
 nifi:
   base-url: https://localhost:8443/nifi-api
-  username: f9a80316-5103-4618-b90e-a37c886cb5d9
-  password: Hh3G6vrgePoxLM+maTdMnKmobHB2AU30
-  root-group-id: 971161e6-019d-1000-a3cf-b33595a62fdd
+  username: e972ec5f-90bd-4e90-810d-c2a47fd67f08
+  password: Xelx6tAH6uJHDLk409u3vekQsK/4bD42
+  root-group-id: 9b1dea98-019d-1000-85f8-693f197078e6
 
 flow:
   scheduling:
@@ -31,4 +31,4 @@ flow:
 
   dbcp:
     driverClass: com.mysql.cj.jdbc.Driver
-    driverLocation: C:/mysql/mysql-connector-j-9.6.0.jar
+    driverLocation: C:/nifi/nifi-1.28.1/lib/mysql-connector-j-8.2.0.jar

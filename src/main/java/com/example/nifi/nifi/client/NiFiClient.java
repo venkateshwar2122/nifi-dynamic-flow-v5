@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
@@ -46,6 +47,7 @@ public class NiFiClient {
 
         try {
             String url = nifi.getBaseUrl().replace("/nifi-api", "") + "/nifi-api/access/token";
+            log.info("Requesting NiFi access token from {}", url);
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
@@ -61,14 +63,30 @@ public class NiFiClient {
             ResponseEntity<String> res =
                     restTemplate.postForEntity(url, entity, String.class);
 
-            return res.getBody();
+            String token = res.getBody();
+            if (token == null || token.isBlank()) {
+                throw new RuntimeException("Token fetch failed: empty NiFi token response");
+            }
 
+            log.info("NiFi access token received");
+            return token;
+
+        } catch (RestClientResponseException e) {
+            log.error(
+                    "NiFi token fetch failed. status={} body={}",
+                    e.getStatusCode(),
+                    safeBody(e.getResponseBodyAsString()),
+                    e
+            );
+            throw new RuntimeException("Token fetch failed: " + e.getStatusCode() + " " + safeBody(e.getResponseBodyAsString()), e);
         } catch (Exception e) {
+            log.error("NiFi token fetch failed: {}", e.getMessage(), e);
             throw new RuntimeException("Token fetch failed", e);
         }
     }
     // ================= PROCESS GROUP =================
     public String createPG(String token, String rootId, String name) {
+        log.info("Creating NiFi process group. parentGroupId={} name={}", rootId, name);
 
         Map<String, Object> body = Map.of(
                 "revision", Map.of("version", 0),   // ✅ REQUIRED
@@ -81,11 +99,19 @@ public class NiFiClient {
                 body
         );
 
-        return (String) res.get("id");
+        String id = requireId(res, "process group");
+        log.info("Created NiFi process group. id={} name={}", id, name);
+        return id;
     }
 
     // ================= PROCESSOR =================
     public String createProcessor(String token, String pgId, String type, ProcessorPosition position) {
+        log.info("Creating NiFi processor. processGroupId={} type={} x={} y={}",
+                pgId,
+                type,
+                position.getX(),
+                position.getY()
+        );
 
         Map<String, Object> body = Map.of(
                 "revision", Map.of("version", 0),
@@ -104,11 +130,14 @@ public class NiFiClient {
                 body
         );
 
-        return (String) res.get("id");
+        String id = requireId(res, "processor");
+        log.info("Created NiFi processor. id={} type={}", id, type);
+        return id;
     }
 
     // ================= CONTROLLER SERVICE =================
     public String createCS(String token, String pgId, String type) {
+        log.info("Creating NiFi controller service. processGroupId={} type={}", pgId, type);
 
         Map<String, Object> body = Map.of(
                 "revision", Map.of("version", 0),   // ✅ REQUIRED
@@ -121,10 +150,17 @@ public class NiFiClient {
                 body
         );
 
-        return (String) res.get("id");
+        String id = requireId(res, "controller service");
+        log.info("Created NiFi controller service. id={} type={}", id, type);
+        return id;
     }
 
     public void updateCS(String token, String id, int version, Map<String, Object> props) {
+        log.info("Updating NiFi controller service. id={} version={} properties={}",
+                id,
+                version,
+                sanitizeProperties(props)
+        );
 
         put(
                 nifi.getBaseUrl() + "/controller-services/" + id,
@@ -140,6 +176,7 @@ public class NiFiClient {
     }
 
     public void enable(String token, String id, int version) {
+        log.info("Enabling NiFi controller service. id={} version={}", id, version);
 
         put(
                 nifi.getBaseUrl() + "/controller-services/" + id + "/run-status",
@@ -150,17 +187,22 @@ public class NiFiClient {
                         "id", id   // ✅ REQUIRED
                 )
         );
+
+        waitForControllerServiceEnabled(token, id);
     }
 
     // ================= VERSION =================
     public int getVersion(String token, String id, String type) {
+        log.info("Fetching NiFi revision version. type={} id={}", type, id);
 
         Map<String, Object> res = get(
                 nifi.getBaseUrl() + "/" + type + "/" + id,
                 token
         );
 
-        return (int) castMap(res.get("revision")).get("version");
+        int version = (int) castMap(res.get("revision")).get("version");
+        log.info("Fetched NiFi revision version. type={} id={} version={}", type, id, version);
+        return version;
     }
 
     // ================= RELATIONSHIPS =================
@@ -230,6 +272,13 @@ public class NiFiClient {
                                     Map<String, Object> props,
                                     String schedule,
                                     List<String> rels) {
+        log.info("Updating NiFi processor. id={} version={} schedule={} properties={} autoTerminate={}",
+                id,
+                version,
+                schedule,
+                sanitizeProperties(props),
+                rels
+        );
 
         put(
                 nifi.getBaseUrl() + "/processors/" + id,
@@ -245,6 +294,101 @@ public class NiFiClient {
                                 )
                         )
                 )
+        );
+    }
+
+    public void validateProcessor(String token, String id) {
+        for (int attempt = 1; attempt <= 20; attempt++) {
+            Map<String, Object> res = get(nifi.getBaseUrl() + "/processors/" + id, token);
+            Map<String, Object> component = castMap(res.get("component"));
+            String validationStatus = (String) component.get("validationStatus");
+
+            if ("VALID".equalsIgnoreCase(validationStatus)) {
+                log.info("NiFi processor is valid. id={}", id);
+                return;
+            }
+
+            Object validationErrors = component.get("validationErrors");
+            log.warn(
+                    "NiFi processor not valid yet. id={} attempt={} validationStatus={} validationErrors={}",
+                    id,
+                    attempt,
+                    validationStatus,
+                    validationErrors
+            );
+
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("Interrupted while validating NiFi processor: " + id, e);
+            }
+        }
+
+        Map<String, Object> res = get(nifi.getBaseUrl() + "/processors/" + id, token);
+        Map<String, Object> component = castMap(res.get("component"));
+        throw new RuntimeException(
+                "NiFi processor is invalid. id="
+                        + id
+                        + " validationStatus="
+                        + component.get("validationStatus")
+                        + " validationErrors="
+                        + component.get("validationErrors")
+        );
+    }
+
+    public void waitForControllerServiceEnabled(String token, String id) {
+        for (int attempt = 1; attempt <= 20; attempt++) {
+            Map<String, Object> res = get(nifi.getBaseUrl() + "/controller-services/" + id, token);
+            Map<String, Object> component = castMap(res.get("component"));
+            Object state = component.get("state");
+            Object validationStatus = component.get("validationStatus");
+
+            if ("ENABLED".equalsIgnoreCase(String.valueOf(state))) {
+                log.info("NiFi controller service is enabled. id={}", id);
+                return;
+            }
+
+            if ("INVALID".equalsIgnoreCase(String.valueOf(validationStatus))) {
+                throw new RuntimeException(
+                        "NiFi controller service is invalid. id="
+                                + id
+                                + " state="
+                                + state
+                                + " validationStatus="
+                                + validationStatus
+                                + " validationErrors="
+                                + component.get("validationErrors")
+                );
+            }
+
+            log.info(
+                    "Waiting for NiFi controller service to become enabled. id={} attempt={} state={} validationStatus={}",
+                    id,
+                    attempt,
+                    state,
+                    validationStatus
+            );
+
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("Interrupted while waiting for NiFi controller service: " + id, e);
+            }
+        }
+
+        Map<String, Object> res = get(nifi.getBaseUrl() + "/controller-services/" + id, token);
+        Map<String, Object> component = castMap(res.get("component"));
+        throw new RuntimeException(
+                "NiFi controller service did not become enabled. id="
+                        + id
+                        + " state="
+                        + component.get("state")
+                        + " validationStatus="
+                        + component.get("validationStatus")
+                        + " validationErrors="
+                        + component.get("validationErrors")
         );
     }
 
@@ -295,6 +439,7 @@ public class NiFiClient {
 
     // ================= CONTROL FLOW =================
     public void controlProcessGroup(String token, String pgId, String state) {
+        log.info("Changing NiFi process group state. processGroupId={} state={}", pgId, state);
 
         int version = getVersion(token, pgId, "process-groups");
 
@@ -311,43 +456,117 @@ public class NiFiClient {
 
     // ================= HTTP HELPERS =================
     private Map<String, Object> post(String url, String token, Object body) {
+        log.info("NiFi HTTP POST {}", url);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(token);
         headers.setContentType(MediaType.APPLICATION_JSON);
 
-        return restTemplate.exchange(
-                url,
-                HttpMethod.POST,
-                new HttpEntity<>(body, headers),
-                new ParameterizedTypeReference<Map<String, Object>>() {}
-        ).getBody();
+        try {
+            Map<String, Object> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.POST,
+                    new HttpEntity<>(body, headers),
+                    new ParameterizedTypeReference<Map<String, Object>>() {}
+            ).getBody();
+            log.info("NiFi HTTP POST succeeded {}", url);
+            return response;
+        } catch (RestClientResponseException e) {
+            throw nifiHttpException("POST", url, e);
+        }
     }
 
     private Map<String, Object> get(String url, String token) {
+        log.info("NiFi HTTP GET {}", url);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(token);
 
-        return restTemplate.exchange(
-                url,
-                HttpMethod.GET,
-                new HttpEntity<>(headers),
-                new ParameterizedTypeReference<Map<String, Object>>() {}
-        ).getBody();
+        try {
+            Map<String, Object> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.GET,
+                    new HttpEntity<>(headers),
+                    new ParameterizedTypeReference<Map<String, Object>>() {}
+            ).getBody();
+            log.info("NiFi HTTP GET succeeded {}", url);
+            return response;
+        } catch (RestClientResponseException e) {
+            throw nifiHttpException("GET", url, e);
+        }
     }
 
     private void put(String url, String token, Object body) {
+        log.info("NiFi HTTP PUT {}", url);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(token);
         headers.setContentType(MediaType.APPLICATION_JSON);
 
-        restTemplate.exchange(
+        try {
+            restTemplate.exchange(
+                    url,
+                    HttpMethod.PUT,
+                    new HttpEntity<>(body, headers),
+                    new ParameterizedTypeReference<Map<String, Object>>() {}
+            );
+            log.info("NiFi HTTP PUT succeeded {}", url);
+        } catch (RestClientResponseException e) {
+            throw nifiHttpException("PUT", url, e);
+        }
+    }
+
+    private RuntimeException nifiHttpException(String method, String url, RestClientResponseException e) {
+        log.error(
+                "NiFi HTTP {} failed. url={} status={} body={}",
+                method,
                 url,
-                HttpMethod.PUT,
-                new HttpEntity<>(body, headers),
-                new ParameterizedTypeReference<Map<String, Object>>() {}
+                e.getStatusCode(),
+                safeBody(e.getResponseBodyAsString()),
+                e
         );
+        return new RuntimeException(
+                "NiFi HTTP " + method + " failed for " + url
+                        + " | status=" + e.getStatusCode()
+                        + " | body=" + safeBody(e.getResponseBodyAsString()),
+                e
+        );
+    }
+
+    private String requireId(Map<String, Object> response, String resourceName) {
+        if (response == null) {
+            throw new RuntimeException("NiFi returned empty response while creating " + resourceName);
+        }
+
+        Object id = response.get("id");
+        if (id instanceof String value && !value.isBlank()) {
+            return value;
+        }
+
+        throw new RuntimeException("NiFi response did not contain id while creating " + resourceName + ": " + response);
+    }
+
+    private Map<String, Object> sanitizeProperties(Map<String, Object> props) {
+        if (props == null || props.isEmpty()) {
+            return Map.of();
+        }
+
+        return props.entrySet().stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        Map.Entry::getKey,
+                        entry -> isSensitive(entry.getKey()) ? "******" : entry.getValue()
+                ));
+    }
+
+    private boolean isSensitive(String key) {
+        String normalized = key == null ? "" : key.toLowerCase();
+        return normalized.contains("password") || normalized.contains("token") || normalized.contains("secret");
+    }
+
+    private String safeBody(String body) {
+        if (body == null || body.isBlank()) {
+            return "";
+        }
+        return body.length() > 1000 ? body.substring(0, 1000) + "...[truncated]" : body;
     }
 }

@@ -47,23 +47,49 @@ public class TablePipelineDeploymentService {
             SharedControllerServices services
     ) {
         String tableName = tableContext.getTableName();
-        log.info("Creating child process group for table: {}", tableName);
+        log.info("Starting table pipeline deployment. datastreamId={} table={} parentProcessGroupId={}",
+                datastreamId,
+                tableName,
+                parentProcessGroupId
+        );
 
         String childProcessGroupId = client.createPG(token, parentProcessGroupId, tableName);
 
         trackingService.saveResource(
                 datastreamId,
                 childProcessGroupId,
+                tableName,
                 "TABLE_PROCESS_GROUP",
                 tableName,
                 childProcessGroupId,
-                "PROCESS_GROUP"
+                "PROCESS_GROUP",
+                parentProcessGroupId,
+                null,
+                null,
+                null,
+                "CREATED",
+                "STOPPED",
+                null,
+                false,
+                null
         );
 
         PipelinePlan plan = pipelinePlanner.planTablePipeline(tableContext, services);
+        log.info("Pipeline plan created. table={} processorCount={} connectionCount={}",
+                tableName,
+                plan.getProcessors().size(),
+                plan.getConnections().size()
+        );
         Map<String, ProcessorManager.ProcessorInfo> processorsByNodeId = new HashMap<>();
 
         for (PlannedProcessor plannedProcessor : plan.getProcessors()) {
+            log.info("Creating planned processor. table={} nodeId={} name={} role={} type={}",
+                    tableName,
+                    plannedProcessor.getNodeId(),
+                    plannedProcessor.getName(),
+                    plannedProcessor.getTemplate().getRole(),
+                    plannedProcessor.getTemplate().getProcessorType()
+            );
             ProcessorManager.ProcessorInfo processor =
                     processorManager.createProcessor(token, childProcessGroupId, plannedProcessor);
 
@@ -72,21 +98,43 @@ public class TablePipelineDeploymentService {
             trackingService.saveResource(
                     datastreamId,
                     childProcessGroupId,
+                    tableName,
                     "PROCESSOR",
                     plannedProcessor.getName(),
                     processor.getId(),
-                    processor.getType()
+                    processor.getType(),
+                    childProcessGroupId,
+                    null,
+                    null,
+                    null,
+                    "CREATED",
+                    "STOPPED",
+                    "PENDING",
+                    false,
+                    null
             );
         }
 
         for (PlannedConnection plannedConnection : plan.getConnections()) {
+            log.info("Creating planned connection. table={} sourceNodeId={} destinationNodeId={}",
+                    tableName,
+                    plannedConnection.getSourceNodeId(),
+                    plannedConnection.getDestinationNodeId()
+            );
             ProcessorManager.ProcessorInfo source =
                     processorsByNodeId.get(plannedConnection.getSourceNodeId());
             ProcessorManager.ProcessorInfo destination =
                     processorsByNodeId.get(plannedConnection.getDestinationNodeId());
 
             if (source == null || destination == null) {
-                throw new RuntimeException("Planned connection references missing processor");
+                throw new RuntimeException(
+                        "Planned connection references missing processor. table="
+                                + tableName
+                                + " sourceNodeId="
+                                + plannedConnection.getSourceNodeId()
+                                + " destinationNodeId="
+                                + plannedConnection.getDestinationNodeId()
+                );
             }
 
             String mainRelationship = source.getMainRelationship();
@@ -114,16 +162,53 @@ public class TablePipelineDeploymentService {
             trackingService.saveResource(
                     datastreamId,
                     childProcessGroupId,
+                    tableName,
                     "CONNECTION",
                     tableName + "_" + plannedConnection.getSourceNodeId() + "_to_" + plannedConnection.getDestinationNodeId(),
                     connectionId,
-                    "CONNECTION"
+                    "CONNECTION",
+                    childProcessGroupId,
+                    source.getId(),
+                    destination.getId(),
+                    mainRelationship,
+                    "CREATED",
+                    "ACTIVE",
+                    null,
+                    true,
+                    null
             );
         }
 
-        client.controlProcessGroup(token, childProcessGroupId, "RUNNING");
+        for (ProcessorManager.ProcessorInfo processor : processorsByNodeId.values()) {
+            try {
+                client.validateProcessor(token, processor.getId());
+                trackingService.markStatus(
+                        datastreamId,
+                        processor.getId(),
+                        "VALID",
+                        "STOPPED",
+                        "VALID",
+                        false,
+                        null
+                );
+            } catch (RuntimeException e) {
+                trackingService.markFailed(datastreamId, processor.getId(), e.getMessage());
+                throw e;
+            }
+        }
 
-        log.info("Table pipeline started: {} ({})", tableName, childProcessGroupId);
+        client.controlProcessGroup(token, childProcessGroupId, "RUNNING");
+        trackingService.markStatus(
+                datastreamId,
+                childProcessGroupId,
+                "RUNNING",
+                "RUNNING",
+                null,
+                true,
+                null
+        );
+
+        log.info("Table pipeline started. table={} processGroupId={}", tableName, childProcessGroupId);
         return childProcessGroupId;
     }
 
